@@ -2,6 +2,7 @@ import stock_py_comm as comm
 import numpy as np
 import baostock as bs
 import pandas as pd
+import os
 
 DICT_ALL_STOCK_INFO = {}
 
@@ -24,10 +25,6 @@ def stock_py_log_out():
     lg = bs.logout()
 
 
-# 检查返回值
-def comm_check_rc(rtn, excp_code):
-    if rtn != excp_code:
-        exit(0)
 
 
 # 获取所有股票的信息
@@ -82,6 +79,8 @@ def stock_py_data_history_curr_day_data_get(code,
                                       "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST",
                                       start_date=time, end_date=time,
                                       frequency=frequency, adjustflag=adjustflag)
+    comm.comm_check_rc(rs.error_code, "0")
+
     return rs
 
 # 获取k线
@@ -93,7 +92,7 @@ def stock_py_data_mov_k_data_get(code, day, type=STOCK_MOV_K_TYPE_5):
                                       "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST",
                                       day, comm.stcok_py_someone_time_next_month_get(day,type),
                                       "d", '2')
-    comm_check_rc(rs.error_code, "0")
+    comm.comm_check_rc(rs.error_code, "0")
     if rs.error_code == "0":
         for i in range(type):
             value_k = 0
@@ -103,6 +102,24 @@ def stock_py_data_mov_k_data_get(code, day, type=STOCK_MOV_K_TYPE_5):
             dict_value_k[i] = round(value_k / STOCK_MOV_K_TYPE_5, 3)    #计算k线值，并保留三位小数
 
     return dict_value_k
+
+
+
+#获取配置文件接口
+def stock_py_data_read_cfg_file():
+    cfg_stock_list = []
+    if os.path.exists("config_stack"):
+        cfg_buff = open('config_stack', 'r').readlines()
+        for i in range(cfg_buff.__len__()):
+            if("stack_num" not in cfg_buff[i]):
+                continue
+            else:
+                stock_num = cfg_buff[i][cfg_buff[i].index(":")+1:]
+                cfg_stock_list.append(stock_num)
+    if cfg_stock_list.__len__() == 0:
+        print("[warning]:config stack is empty or no vaild concent")
+
+    return cfg_stock_list
 
 if __name__ == '__main__':
     pass

@@ -1,9 +1,22 @@
 import time  # 引入time模块
+import inspect
+
 
 STOCK_COMM_RTN_OK = 1
 STOCK_COMM_RTN_ERR = 0
 STCOK_COMM_PREVIOUS_MONTH = 2
 STCOK_COMM_NEXT_MONTH = 1
+
+
+# 检查返回值
+def comm_check_rc(rtn, excp_code):
+    if rtn != excp_code:
+        frame, filename, line_number, function_name, lines, index = inspect.stack()[1]
+
+        print("finename:{}, \nlines:{}, \nline_number:{}\n ".\
+              format(filename, lines, line_number))
+
+        exit(0)
 
 
 # 获取当前时间，返回字符串
