@@ -56,8 +56,8 @@ def stock_py_log_out():
 # 获取所有股票的信息
 def stock_py_all_stcok_info_get():
     stock_py_login_in()
-    rs = bs.query_all_stock()
-    if rs.error_code != 0:
+    rs = bs.query_all_stock(day="2021-06-04")
+    if rs.error_code == "0":
         for i in range(len(rs.data)):
             DICT_ALL_STOCK_INFO[rs.data[i][2]] = {}
             DICT_ALL_STOCK_INFO[rs.data[i][2]]["code"] = rs.data[i][0]
@@ -130,49 +130,88 @@ def stock_py_data_mov_k_data_get(code, day, type=STOCK_MOV_K_TYPE_5):
     return dict_value_k
 
 #获取配置文件接口
-def stock_py_read_cfg_file(filename="./cfg_file/config_stock.ini"):
-    cfg_stock_list = []
+def stock_py_read_match_file(filename="./cfg_file/config_match_stock.ini"):
+    cfg_stock_match_list = []
 
     if not os.path.exists("cfg_file"):
         os.mkdir("cfg_file")
-        fp = open("./cfg_file/config_stock.ini","w")
-        fp.close()
 
-        fp = open("./cfg_file/config_self_choose_stock.ini", "w")
+    if not os.path.exists(filename):
+        fp = open(filename,"w")
         fp.close()
+        comm.comm_retrun()
 
     if os.path.exists(filename):
-        cfg_buff = open(filename, 'r').readlines()
+        fd = open(filename, 'r')
+        cfg_buff = fd.readlines()
         for i in range(cfg_buff.__len__()):
             if(":" not in cfg_buff[i]):
                 continue
             else:
-                stock_num = cfg_buff[i][cfg_buff[i].index(":")+1:]
-                cfg_stock_list.append(stock_num)
-
-        if cfg_stock_list.__len__() == 0:
+                stock_num = cfg_buff[i][cfg_buff[i].index(":")+1:].lstrip()
+                if stock_num not in DICT_ALL_STOCK_INFO:
+                    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,
+                                       "{} is not a vaild stock name".format(str(stock_num)))
+                else:
+                    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,
+                                       "stock {} searched".format(str(stock_num)))
+                    cfg_stock_match_list.append(stock_num)
+        fd.close()
+        if cfg_stock_match_list.__len__() == 0:
             print("[warning]:config stack is empty or no vaild stock_code")
     else:
         print("[warning]:file {} doesnt exists".format(filename))
 
-    return cfg_stock_list
+    return cfg_stock_match_list
 
 
-def stock_py_read_match_file():
-    pass
 
-def stock_py_read_self_choose_file():
-    pass
+#获取配置文件接口
+def stock_py_read_self_choose_file(filename="./cfg_file/config_self_choose_stock.ini"):
+    choose_stock_list = []
+
+    if not os.path.exists("cfg_file"):
+        os.mkdir("cfg_file")
+        fp = open("./cfg_file/config_self_choose_stock.ini", "w")
+        fp.close()
+        comm.comm_retrun()
+
+    if os.path.exists(filename):
+        fd = open(filename, 'r')
+        choose_buff = fd.readlines()
+        if(choose_buff.__len__() == 0):
+            print("[NOTICE]：no self choose match\n")
+            return choose_stock_list
+
+        for i in range(choose_buff.__len__()):
+            if (":" not in choose_buff[i]):
+                continue
+            else:
+                stock_num = choose_buff[i][choose_buff[i].index(":") + 1:].lstrip()
+                if stock_num not in DICT_ALL_STOCK_INFO :
+                    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG, "{} is not a vaild stock name".format(str(stock_num)))
+                else:
+                    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,
+                                       "stock {} searched".format(str(stock_num)))
+                    choose_stock_list.append(stock_num)
+
+        fd.close()
+        if choose_stock_list.__len__() == 0:
+            print("[warning]:config stack is empty or no vaild stock_code")
+    else:
+        print("[warning]:file {} doesnt exists".format(filename))
+
+    return choose_stock_list
 
 #分析主接口
 def stock_py_fun_analysis_someone_stock(args):
-    code, match_type = args
+    codes, match_types = args
     while(1):
         rc = comm.stock_py_mutex_try_to_lock(mutex_match)
         if not rc:
-            if not g_list_match_stock_buff[code]["is_stop"]:
-                print("code = {}\n".format(args[0]))
-
+            for code, match_type in zip(codes, match_types):
+                if not g_list_match_stock_buff[code]["is_stop"]:
+                    print("code = {}\n".format(args[0]))
             else:
                 break
         else:
@@ -180,47 +219,45 @@ def stock_py_fun_analysis_someone_stock(args):
 
 #条件匹配接口
 def stock_py_fun_match_notice(args):
-    code, reason, action_code, match_type = args
+    global g_match_fun_thread_id
+
+    codes, reasons, action_codes, match_types = args
     while(1):
         rc = comm.stock_py_mutex_try_to_lock(mutex_match)
         if not rc:
-            if code in g_list_match_stock_buff:
+            if (len(codes) == len(reasons) == len(action_codes) == len(match_types)) and len(codes) > 0:
+                for code, reason, action_code, match_type in zip(codes, reasons, action_codes, match_types):
+                    if code in g_list_match_stock_buff:
+                        continue
 
-                rc = comm.stock_py_mutex_release(mutex_match)
-                comm.comm_check_rc(rc, comm.STOCK_COMM_MUTEX_UNLOCK)
+                    g_match_stock_buff.match_type = match_type
+                    g_match_stock_buff.code = code
+                    g_match_stock_buff.reason = reason
+                    g_match_stock_buff.days = time.strftime("%Y-%m-%d", time.localtime())
 
-                continue
+                    if action_code == STOCK_ACTION_TYPE_ADD:
+                        g_list_match_stock_buff[code] = {}
+                        g_list_match_stock_buff[code]["code"] = g_match_stock_buff.code
+                        g_list_match_stock_buff[code]["match_type"] = g_match_stock_buff.match_type
+                        g_list_match_stock_buff[code]["reason"] = g_match_stock_buff.reason
+                        g_list_match_stock_buff[code]["days"] = g_match_stock_buff.days
+                        g_list_match_stock_buff[code]["is_stop"] = 0
+                        print("[notice]: code {} begin to analysis".format(code))
 
-            g_match_stock_buff.match_type = match_type
-            g_match_stock_buff.code = code
-            g_match_stock_buff.reason = reason
-            g_match_stock_buff.days = time.strftime("%Y-%m-%d", time.localtime())
+                    elif action_code == STOCK_ACTION_TYPE_REMOVE:
+                        comm.stock_py_join_thread(g_list_match_stock_buff[code]["thread_id"])
+                        time.sleep(10)
 
-            if action_code == STOCK_ACTION_TYPE_ADD:
-                g_list_match_stock_buff[code] = {}
-
-                thread_id = comm.stock_py_create_new_thread(stock_py_fun_analysis_someone_stock,
-                                                            (code, match_type))
-
-                g_list_match_stock_buff[code]["code"] = g_match_stock_buff.code
-                g_list_match_stock_buff[code]["match_type"] = g_match_stock_buff.match_type
-                g_list_match_stock_buff[code]["reason"] = g_match_stock_buff.reason
-                g_list_match_stock_buff[code]["days"] = g_match_stock_buff.days
-                g_list_match_stock_buff[code]["thread_id"] = thread_id
-                g_list_match_stock_buff[code]["is_stop"] = 0
-                print("[notice]: code {} begin to analysis".format(code))
-            elif action_code == STOCK_ACTION_TYPE_REMOVE:
-                comm.stock_py_join_thread(g_list_match_stock_buff[code]["thread_id"])
-                time.sleep(10)
-
-                if code in g_list_match_stock_buff:
-                    g_list_match_stock_buff.pop(code)
-
-
-            rc = comm.stock_py_mutex_release(mutex_match)
-            comm.comm_check_rc(rc, comm.STOCK_COMM_MUTEX_UNLOCK)
+                        if code in g_list_match_stock_buff:
+                            g_list_match_stock_buff.pop(code)
+                    rc = comm.stock_py_mutex_release(mutex_match)
+                    comm.comm_check_rc(rc, comm.STOCK_COMM_MUTEX_UNLOCK)
+                break
         else:
             time.sleep(1)
+
+    g_match_fun_thread_id = comm.stock_py_create_new_thread(stock_py_fun_analysis_someone_stock,
+                                                            (codes, match_types))
 
 
 

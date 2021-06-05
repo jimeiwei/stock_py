@@ -1,7 +1,7 @@
 import time  # 引入time模块
 import inspect
 import threading
-
+import os
 STOCK_COMM_RTN_OK = 1
 STOCK_COMM_RTN_ERR = 0
 STCOK_COMM_PREVIOUS_MONTH = 2
@@ -11,6 +11,10 @@ STCOK_COMM_NEXT_MONTH = 1
 STOCK_COMM_MUTEX_LOCK = 1
 STOCK_COMM_MUTEX_UNLOCK = 0
 
+"""记录登记"""
+STOCK_COMM_LOG_LEVEL_DEBUG = 0
+STOCK_COMM_LOG_LEVEL_LOG   = 1
+STOCK_COMM_LOG_LEVEL_ERR   = 2
 
 
 # 检查返回值
@@ -23,6 +27,13 @@ def comm_check_rc(rtn, excp_code):
 
         exit(0)
 
+def comm_retrun():
+    frame, filename, line_number, function_name, lines, index = inspect.stack()[1]
+
+    print("finename:{}, \nlines:{}, \nline_number:{}\n ". \
+          format(filename, lines, line_number))
+
+    exit(0)
 
 # 获取当前时间，返回字符串
 def stcok_py_curr_time_get():
@@ -147,7 +158,40 @@ def stock_py_create_new_thread(fun, args):
 
 #回收线程
 def stock_py_join_thread(thread_id):
-    thread_id.join()
+    pass
+
+
+
+
+
+#记录日志
+def stock_py_dlog(level, content):
+    frame, filename, line_number, function_name, lines, index = inspect.stack()[1]
+    if level == STOCK_COMM_LOG_LEVEL_DEBUG:
+        print(content)
+    elif level == STOCK_COMM_LOG_LEVEL_LOG:
+        if not os.path.exists("./cfg_file/stock_py.log"):
+            fp = open("./cfg_file/stock_py.log", "w")
+            fp.close()
+
+        fd = open("./cfg_file/stock_py.log","a")
+        fd.write("time:{}, level:{}, filename:{}, line_number:{}, function_name:{}, content:{}\n".
+                format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), level,filename, line_number, function_name, content))
+        fd.close()
+    elif level == STOCK_COMM_LOG_LEVEL_ERR:
+        #记录日志并退出
+        if not os.path.exists("./cfg_file/stock_py.log"):
+            fp = open("./cfg_file/stock_py.log", "w")
+            fp.close()
+
+        fd = open("./cfg_file/stock_py.log","a")
+        fd.write("time:{}, level:{}, filename:{}, line_number:{}, function_name:{}, content:{}\n".
+                format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), level,filename, line_number, function_name, content))
+        fd.close()
+        comm_retrun()
+
+
+
 
 if __name__ == '__main__':
     pass
