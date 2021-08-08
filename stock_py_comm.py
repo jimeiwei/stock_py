@@ -35,7 +35,10 @@ def comm_create_result_file():
     if not os.path.exists(STOCK_RESULT_FILE_PATH):
         fp = open(STOCK_RESULT_FILE_PATH, "w")
         fp.close()
-
+    else:
+        os.remove(STOCK_RESULT_FILE_PATH)
+        fp = open(STOCK_RESULT_FILE_PATH, "w")
+        fp.close()
 
 
 #写入文件
@@ -79,8 +82,9 @@ def stcok_py_curr_time_get():
     return currtime.split()[0]
 
 
+
 # 获取当前时间的前两个月的时间
-def stcok_py_curr_time_before_day_get():
+def stcok_py_curr_time_before_day_get(month_set=2):
     current_day = stcok_py_curr_time_get()
     year = current_day.split("-")[0]
     month = current_day.split("-")[1]
@@ -88,11 +92,11 @@ def stcok_py_curr_time_before_day_get():
     if int(day) > 27:
         day = 27
 
-    if int(month) <= 2:
+    if int(month) <= month_set:
         year = int(year) - 1
-        month = int(month) + 12 - STCOK_COMM_PREVIOUS_MONTH
+        month = int(month) + 12 - month_set
     else:
-        month = int(month) - STCOK_COMM_PREVIOUS_MONTH
+        month = int(month) - month_set
 
     if (len(str(month)) < 2):
         month = '0' + str(month)
@@ -236,6 +240,14 @@ def stock_py_weekday_sure():
         return 0
     else:
         return 1
+
+
+def stock_py_close_stream_days_get():
+    today = stcok_py_curr_time_get()
+    day = today.split('-')[0] + '-' + today.split('-')[1] + '-'
+    days = [day + str(i) for i in range(1,28)]
+
+    return days
 
 
 #最近工作时间获取

@@ -19,14 +19,9 @@ def stock_sys_init():
     cfg_stock_match_list = stock_py.stock_py_read_match_file()
     #获取自选股票信息
     cfg_stock_choose_list = stock_py.stock_py_read_self_choose_file()
-    #cfg_stock_match_list = [["太阳纸业"], ["看着要涨停"], [stock_py.STOCK_ACTION_TYPE_ADD], ["1"]]
-    #if cfg_stock_match_list.__len__() == 4:
-    #    stock_py.stock_py_fun_match_notice(cfg_stock_match_list)
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     stock_sys_init()
-    stock_py.stock_py_golden_frok_get()
-
+    stock_py.stock_py_steam_num_get(stock_py.STOCK_MOV_K_TYPE_20)
 

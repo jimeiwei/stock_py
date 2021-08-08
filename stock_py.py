@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import threading
 import time
-
+import numpy as np
 
 """声明"""
 """类"""
@@ -19,6 +19,9 @@ DICT_ALL_STOCK_INFO = {}
 g_match_stock_buff = match_stcok_buff
 g_list_match_stock_buff = {}
 
+STOCK_STREAM_PRICE_PERCENT = 0.8
+g_llist_steam_stcok_infos = {}
+g_high_shake_stock_list = {}
 
 STOCK_LOW_PRICE_PERCENT_FLAG = 0.5
 STOCK_LOW_PRICE_FLAG = 1
@@ -57,22 +60,26 @@ def stock_py_log_out():
 # 获取所有股票的信息
 def stock_py_all_stcok_info_get():
     stock_py_login_in()
-    rs = bs.query_all_stock(day=comm.stock_py_close_wrok_day_get())
-    if rs.error_code == "0":
-        for i in range(len(rs.data)):
-            DICT_ALL_STOCK_INFO[rs.data[i][2]] = {}
-            DICT_ALL_STOCK_INFO[rs.data[i][2]]["code"] = rs.data[i][0]
-            DICT_ALL_STOCK_INFO[rs.data[i][2]]["tradeStatus"] = rs.data[i][1]
-            DICT_ALL_STOCK_INFO[rs.data[i][2]]["code_name"] = rs.data[i][2]
-        data_list = []
-        while (rs.error_code == '0') & rs.next():
-            # 获取一条记录，将记录合并在一起
-            data_list.append(rs.get_row_data())
-        result = pd.DataFrame(data_list, columns=rs.fields)
+    rs = []
+    days = comm.stock_py_close_stream_days_get()
+    for day in days:
+        rs = bs.query_all_stock(day)
+        if rs.error_code == "0" and rs.data.__len__():
+            break
+    for i in range(len(rs.data)):
+        DICT_ALL_STOCK_INFO[rs.data[i][2]] = {}
+        DICT_ALL_STOCK_INFO[rs.data[i][2]]["code"] = rs.data[i][0]
+        DICT_ALL_STOCK_INFO[rs.data[i][2]]["tradeStatus"] = rs.data[i][1]
+        DICT_ALL_STOCK_INFO[rs.data[i][2]]["code_name"] = rs.data[i][2]
+    data_list = []
+    while (rs.error_code == '0') & rs.next():
+        # 获取一条记录，将记录合并在一起
+        data_list.append(rs.get_row_data())
+    result = pd.DataFrame(data_list, columns=rs.fields)
 
-        #### 结果集输出到csv文件 ####
-        result.to_csv("./cfg_file/all_stock.csv", encoding="gbk", index=False)
-        comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG, "[NOTCICE]: all stock info exported succeed")
+    #### 结果集输出到csv文件 ####
+    result.to_csv("./cfg_file/all_stock.csv", encoding="gbk", index=False)
+    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG, "[NOTCICE]: all stock info exported succeed")
     return comm.STOCK_COMM_RTN_OK
 
 
@@ -290,7 +297,6 @@ def stock_py_golden_frok_get(ingore_second_board_flag=1, low_price_check=1):
                 if( not stock_py_most_low_price_check(DICT_ALL_STOCK_INFO[code]['code'] ,k_data_5[4])):
                     continue
 
-
             #符合以下几个条件
             #1. 5日均线和10日均线都属于向上趋势
             #2. 5日均线超过10日均线
@@ -306,15 +312,22 @@ def stock_py_golden_frok_get(ingore_second_board_flag=1, low_price_check=1):
             value_10_3 = k_data_10[3]
             value_10_4 = k_data_10[4]
 
+            if (value_5_4 > value_10_4) and (value_5_3 > value_10_3) and ((value_5_2 < value_10_2) or (value_5_1 < value_10_1)):
+                if (value_5_4 - value_5_3 > 0) and (value_5_3 - value_5_2 > 0) and (value_10_4 - value_10_3 > 0) and (value_10_3 - value_10_2 > 0):
+                    print(code)
+                    golden_fork.append(code)
+
             if (value_5_4 > value_10_4) and (value_5_3 > value_10_3) and (value_5_2 > value_10_2) and ( (value_5_1 < value_10_1) or (value_5_0 < value_10_0) ):
                 if (value_5_4 - value_5_3 > 0) and (value_5_3 - value_5_2 > 0) and (value_10_4 - value_10_3 > 0) and (value_10_3 - value_10_2 > 0):
                     print(code)
                     golden_fork.append(code)
     #写入记录
     if golden_fork.__len__():
-        comm.comm_write_to_file(comm.STOCK_RESULT_FILE_PATH, "code select as follows:\n")
+        comm.comm_write_to_file(comm.STOCK_RESULT_FILE_PATH, "code select as follows:")
+        comm.comm_write_to_file(comm.STOCK_RESULT_FILE_PATH, "股票\t当前价格")
+
         for code in golden_fork:
-             comm.comm_write_to_file(comm.STOCK_RESULT_FILE_PATH, "code_name:{}\n".format(code))
+             comm.comm_write_to_file(comm.STOCK_RESULT_FILE_PATH, "{}".format(code))
 
     comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,"finish stock_py_golden_frok_get")
     print("finish stock_py_golden_frok_get")
@@ -346,13 +359,133 @@ def stock_py_most_low_price_check(code, price, end_day=comm.stock_py_close_wrok_
 
 
 
+#股票趋势
+def stock_py_steam_num_get(type):
+    comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,"begin stock_py_steam_num_get")
+    most_close_work_day = comm.stcok_py_curr_time_get()
+    into_anals_flag = 0
+    for code in DICT_ALL_STOCK_INFO.keys():
+        cnt_beyond_0 = 0
+        cnt_less_0 = 0
+        pctChgs = []
+        if code == '中证TMT产业主题指数' and into_anals_flag == 0:
+            into_anals_flag = 1
+            continue
+        if ("sz.30" in DICT_ALL_STOCK_INFO[code]['code'] or "688" in DICT_ALL_STOCK_INFO[code]['code'] or "399" in DICT_ALL_STOCK_INFO[code]['code']):
+            continue
+        rs = bs.query_history_k_data_plus(DICT_ALL_STOCK_INFO[code]['code'],
+                                          "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST",
+                                          comm.stcok_py_curr_time_before_day_get(), most_close_work_day,
+                                          "d", '2')
+        comm.comm_check_rc(rs.error_code, "0")
+
+        for i in rs.data:
+            pctChgs.append(i[12])
+
+        if pctChgs.__len__() > type:
+            pctChgs = pctChgs[pctChgs.__len__() - type:]
+        else:   #时间太短推出筛选
+            continue
+
+        for i in pctChgs:
+            try:
+                if float(i) > 0:
+                    cnt_beyond_0 += 1
+                else:
+                    cnt_less_0 += 1
+            except ValueError:
+                comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG, "calc percent of stream")
+                break
+
+        if (cnt_beyond_0 / pctChgs.__len__()) >= STOCK_STREAM_PRICE_PERCENT:
+            g_llist_steam_stcok_infos[DICT_ALL_STOCK_INFO[code]['code']] = float(cnt_beyond_0 / pctChgs.__len__())
+
+    if (len(g_llist_steam_stcok_infos.keys())):
+        for i in g_llist_steam_stcok_infos.keys():
+            print("code:{}, percent:{}".format(i, g_llist_steam_stcok_infos[i]))
 
 
 
 
+#行业信息获取
+def stock_py_industry_info_get():
+    rs = bs.query_stock_industry()  # 获取全行业信息
+    industry_list = []
+    while (rs.error_code == '0') & rs.next():
+        # 获取一条记录，将记录合并在一起
+        if (rs.get_row_data()[1] and rs.get_row_data()[3]):
+            try:
+                industry_list.append([rs.get_row_data()[1], rs.get_row_data()[3]])
+            except IndexError:
+                continue
+    return industry_list
 
 
+def stcok_py_price_shake_check(price_3):
+    mean_price_0 = np.mean(np.array(price_3[0:11]))
+    std_price_0 = np.std(np.array(price_3[0:11]))
+    mean_price_1 = np.mean(np.array(price_3[12:23]))
+    std_price_1 = np.std(np.array(price_3[12:23]))
+    mean_price_2 = np.mean(np.array(price_3[24:35]))
+    std_price_2 = np.std(np.array(price_3[23:35]))
 
+    if ((mean_price_2 > mean_price_1) and (mean_price_1 - mean_price_0)):
+        return 1
+    if (std_price_0 < 0.1 and std_price_1 < 0.1 and std_price_2 < 0.1)  or \
+            (np.abs(((mean_price_1 - mean_price_0) / mean_price_0)) < 0.02 and  np.abs(((mean_price_2 - mean_price_1) / mean_price_1)) < 0.02):
+        return 2
+    return 0
+
+#3个月创新高或者维持震荡
+def stock_py_high_shake_stock_get():
+    industry_list = stock_py_industry_info_get()
+    most_close_work_day = comm.stcok_py_curr_time_get()
+
+    for i in industry_list:
+        prices_3 = []
+        price_9 = []
+        k = 0
+        begin_flag = 0
+        code =i[0]
+        industry = i[1]
+        rs = bs.query_history_k_data_plus(code,
+                                          "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST",
+                                          comm.stcok_py_curr_time_before_day_get(10), most_close_work_day,
+                                          "d", '2')
+        comm.comm_check_rc(rs.error_code, "0")
+
+        if rs.data.__len__() > 200:
+            for j in rs.data:
+                k+=1
+
+                if begin_flag:
+                    prices_3.append(float(j[5]))
+                    continue
+
+                if(k > (rs.data.__len__() - 36)):
+                    begin_flag = 1
+                    prices_3.append(float(j[5]))
+                else:
+                    price_9.append(float(j[5]))
+
+            price_high = max(prices_3) > max(price_9)
+            price_shake = stcok_py_price_shake_check(prices_3)
+
+            if price_high:
+                pass
+
+            if price_high or price_shake:
+                if industry not in g_high_shake_stock_list.keys():
+                    g_high_shake_stock_list[industry] = {}
+                g_high_shake_stock_list[industry][code] = [price_high, price_shake]
+
+    for i in g_high_shake_stock_list.keys():
+        print("产业：{}".format(i))
+        for code in g_high_shake_stock_list[i].keys():
+            if g_high_shake_stock_list[i][code][1] == 1:
+                print("code:{}, price_high:{}, price_shake:{}".format(code, g_high_shake_stock_list[i][code][0], "趋势向上"))
+            else:
+                print("code:{}, price_high:{}, price_shake:{}".format(code, g_high_shake_stock_list[i][code][0], "维持震荡"))
 
 
 
