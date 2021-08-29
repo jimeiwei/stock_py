@@ -19,8 +19,10 @@ DICT_ALL_STOCK_INFO = {}
 g_match_stock_buff = match_stcok_buff
 g_list_match_stock_buff = {}
 
-STOCK_STREAM_PRICE_PERCENT = 0.8
-g_llist_steam_stcok_infos = {}
+STOCK_STREAM_PRICE_PERCENT_D20 = 0.75
+STOCK_STREAM_PRICE_PERCENT_D10 = 0.8
+
+
 g_high_shake_stock_list = {}
 
 STOCK_LOW_PRICE_PERCENT_FLAG = 0.5
@@ -360,14 +362,24 @@ def stock_py_most_low_price_check(code, price, end_day=comm.stock_py_close_wrok_
 
 
 #股票趋势
-def stock_py_steam_num_get(type):
+def stock_py_steam_num_get(type, stream_percent):
     comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG,"begin stock_py_steam_num_get")
     most_close_work_day = comm.stcok_py_curr_time_get()
     into_anals_flag = 0
+    g_llist_steam_stcok_infos = {}
+
     for code in DICT_ALL_STOCK_INFO.keys():
+
+        if ("sh" in DICT_ALL_STOCK_INFO[code]['code'] and "000" in DICT_ALL_STOCK_INFO[code]['code']):
+            continue
         cnt_beyond_0 = 0
         cnt_less_0 = 0
+        amount_total = float(0)
+        turn_num = float(0)
         pctChgs = []
+        pctChgs_amount = []
+        pctChgs_turn = []
+
         if code == '中证TMT产业主题指数' and into_anals_flag == 0:
             into_anals_flag = 1
             continue
@@ -381,29 +393,34 @@ def stock_py_steam_num_get(type):
 
         for i in rs.data:
             pctChgs.append(i[12])
+            pctChgs_amount.append(i[8])
+            pctChgs_turn.append(i[10])
 
         if pctChgs.__len__() > type:
             pctChgs = pctChgs[pctChgs.__len__() - type:]
-        else:   #时间太短推出筛选
+        else:   #时间太短退出筛选
             continue
 
-        for i in pctChgs:
+        for i,j,k in zip(pctChgs, pctChgs_amount, pctChgs_turn) :
             try:
                 if float(i) > 0:
                     cnt_beyond_0 += 1
                 else:
                     cnt_less_0 += 1
+                amount_total += round(float(j) / 100000000,2)
+                turn_num += float(k)
             except ValueError:
                 comm.stock_py_dlog(comm.STOCK_COMM_LOG_LEVEL_LOG, "calc percent of stream")
                 break
-
-        if (cnt_beyond_0 / pctChgs.__len__()) >= STOCK_STREAM_PRICE_PERCENT:
-            g_llist_steam_stcok_infos[DICT_ALL_STOCK_INFO[code]['code']] = float(cnt_beyond_0 / pctChgs.__len__())
+        #换手率高于5 且 成交额大于10亿 且近若干天的涨幅天数大于stream_percent
+        if (cnt_beyond_0 / pctChgs.__len__()) >= stream_percent  and ((amount_total/type)*7 > 10) and turn_num > 5:
+            g_llist_steam_stcok_infos[DICT_ALL_STOCK_INFO[code]['code']] = [DICT_ALL_STOCK_INFO[code]['code'], float(cnt_beyond_0 / pctChgs.__len__())]
 
     if (len(g_llist_steam_stcok_infos.keys())):
         for i in g_llist_steam_stcok_infos.keys():
-            print("code:{}, percent:{}".format(i, g_llist_steam_stcok_infos[i]))
+            print("code:{}, percent:{}".format(i, g_llist_steam_stcok_infos[i][1]))
 
+    return g_llist_steam_stcok_infos
 
 
 

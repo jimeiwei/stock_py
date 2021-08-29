@@ -23,5 +23,16 @@ def stock_sys_init():
 
 if __name__ == '__main__':
     stock_sys_init()
-    stock_py.stock_py_steam_num_get(stock_py.STOCK_MOV_K_TYPE_20)
 
+    list_steam_stcok_infos_20d = []
+    list_steam_stcok_infos_10d = []
+
+    list_steam_stcok_infos_20d = stock_py.stock_py_steam_num_get(stock_py.STOCK_MOV_K_TYPE_20, stock_py.STOCK_STREAM_PRICE_PERCENT_D20)
+    print('-----------------------STOCK_MOV_K_TYPE_20-----------------------------')
+    list_steam_stcok_infos_10d = stock_py.stock_py_steam_num_get(stock_py.STOCK_MOV_K_TYPE_10, stock_py.STOCK_STREAM_PRICE_PERCENT_D10)
+    print('-----------------------STOCK_MOV_K_TYPE_10&20-----------------------------')
+
+
+    for i in [stock_10d[0] for stock_10d in list_steam_stcok_infos_10d]:
+        if i not in [stock_20d[0] for stock_20d in list_steam_stcok_infos_20d]:
+            print("code:{}, percent:{}".format(i, list_steam_stcok_infos_10d[list_steam_stcok_infos_10d.index(i)][1]))
